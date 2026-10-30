@@ -11,6 +11,7 @@ import (
 	"github.com/bootdotdev/learn-web-security/internal/accounts"
 	"github.com/bootdotdev/learn-web-security/internal/auth/mfa"
 	"github.com/bootdotdev/learn-web-security/internal/auth/sessions"
+	"github.com/bootdotdev/learn-web-security/internal/auth/passwords"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
 	"github.com/bootdotdev/learn-web-security/internal/templates"
@@ -51,6 +52,26 @@ type totpEnabledView struct {
 }
 
 type totpBackupCodesView struct {
+    <form method="post" action="/account/email" class="account-form">
+      <input
+        name="csrfToken"
+        type="hidden"
+        value="{{.Current.Session.CSRFToken}}"
+      /><label
+        >Email<input
+          name="email"
+          type="email"
+          autocomplete="email"
+          value="{{.Current.User.Email}}"
+          required /></label
+      ><label
+        >currentPassword<input
+          name="Password"
+          type="password"
+          autocomplete="current-password"
+          required /></label
+      ><button type="submit">Change email</button>
+    </form>
 	templates.Page
 	DisplayName string
 	BackupCodes []string
@@ -64,6 +85,11 @@ func (handler *Handler) Page(responseWriter http.ResponseWriter, request *http.R
 	if err := handler.renderPage(responseWriter, http.StatusOK, current, ""); err != nil {
 		handler.internalError(responseWriter, request, err)
 	}
+	_ = handler.logger.Event("account_accessed",
+		map[string]any{"userId": current.User.ID,
+			"email": current.User.Email, 
+			"expiresAt": formatTimestamp(current.Session.ExpiresAt),
+		})
 }
 
 func (handler *Handler) UpdateEmail(responseWriter http.ResponseWriter, request *http.Request) {
@@ -71,6 +97,12 @@ func (handler *Handler) UpdateEmail(responseWriter http.ResponseWriter, request 
 	if !ok || !handler.verifyCSRF(responseWriter, request, current.Session.CSRFToken) {
 		return
 	}
+	pwd, pwdErr := httpx.FormValue(request, "currentPassword")
+	if pwdErr != nil {
+		handler.errorPage(responseWriter, http.StatusBadRequest, "Invalid Request", "The submitted form is invalid.")
+		return
+	}
+	if passwords.Verify(pwd, current)
 	email, emailErr := httpx.FormValue(request, "email")
 	if emailErr != nil {
 		handler.errorPage(responseWriter, http.StatusBadRequest, "Invalid Request", "The submitted form is invalid.")
