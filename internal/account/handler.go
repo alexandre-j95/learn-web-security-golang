@@ -78,17 +78,16 @@ func (handler *Handler) UpdateEmail(responseWriter http.ResponseWriter, request 
 	if !ok || !handler.verifyCSRF(responseWriter, request, current.Session.CSRFToken) {
 		return
 	}
-	pwd, pwdErr := httpx.FormValue(request, "currentPassword")
-	if pwdErr != nil {
-		handler.errorPage(responseWriter, http.StatusBadRequest, "Invalid Request", "The submitted form is invalid.")
-		return
-	}
-	if !passwords.Verify(pwd, current.User.PasswordHash) {
-		return
-	}
+	currentPassword, passwordErr := httpx.FormValue(request, "currentPassword")
 	email, emailErr := httpx.FormValue(request, "email")
-	if emailErr != nil {
+	if passwordErr != nil || emailErr != nil {
 		handler.errorPage(responseWriter, http.StatusBadRequest, "Invalid Request", "The submitted form is invalid.")
+		return
+	}
+	if currentPassword == "" || !passwords.Verify(currentPassword, current.User.PasswordHash) {
+		if err := handler.renderPage(responseWriter, http.StatusForbidden, current, "Re-enter your current password to change your email."); err != nil {
+			handler.internalError(responseWriter, request, err)
+		}
 		return
 	}
 	email = accounts.NormalizeEmail(email)
