@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/google/uuid"
 )
 
 type Keyring interface {
@@ -20,6 +22,10 @@ type StoredDocument struct {
 }
 
 func StoreDocument(contents []byte, uploadDirectory string, encryptionKeyring Keyring) (StoredDocument, bool, error) {
+	documentType, extension, valid := detectDocumentType(contents)
+	if !valid {
+		return StoredDocument{}, false, nil
+	}
 	storedContents, encrypted, err := encryptDocument(contents, encryptionKeyring)
 	if err != nil {
 		return StoredDocument{}, false, err
@@ -27,14 +33,16 @@ func StoreDocument(contents []byte, uploadDirectory string, encryptionKeyring Ke
 	if err := os.MkdirAll(uploadDirectory, 0o755); err != nil {
 		return StoredDocument{}, false, fmt.Errorf("create upload directory: %w", err)
 	}
-	storagePath := filepath.Join(uploadDirectory, "uploaded-document")
+	storagePath := filepath.Join(uploadDirectory, uuid.New().String())
 	if encrypted {
 		storagePath += ".enc"
+	} else {
+		storagePath += extension
 	}
 	if err := writeDocument(storagePath, storedContents, encrypted); err != nil {
 		return StoredDocument{}, false, err
 	}
-	return StoredDocument{ContentType: "application/octet-stream", StoragePath: storagePath}, true, nil
+	return StoredDocument{ContentType: documentType, StoragePath: storagePath}, true, nil
 }
 
 func detectDocumentType(contents []byte) (string, string, bool) {

@@ -83,6 +83,9 @@ func (handler *Handler) Submit(responseWriter http.ResponseWriter, request *http
 	if !ok {
 		return
 	}
+	if !handler.verifyCSRF(responseWriter, request, current.Session.CSRFToken) {
+		return
+	}
 	items, err := handler.cartStore.ListItems(request.Context(), current.User.ID)
 	if err != nil {
 		handler.internalError(responseWriter, request, err)
@@ -188,6 +191,19 @@ func (handler *Handler) Processing(responseWriter http.ResponseWriter, request *
 	if err := handler.renderer.Render(responseWriter, http.StatusOK, "pawpal-processing", view); err != nil {
 		handler.internalError(responseWriter, request, err)
 	}
+}
+
+func (handler *Handler) verifyCSRF(responseWriter http.ResponseWriter, request *http.Request, expectedToken string) bool {
+	actualToken, err := httpx.FormValue(request, "csrfToken")
+	if err != nil {
+		handler.errorPage(responseWriter, http.StatusBadRequest, "Invalid Request", "The submitted form is invalid")
+		return false
+	}
+	if sessions.CSRFTokensMatch(expectedToken, actualToken) {
+		return true
+	}
+	handler.errorPage(responseWriter, http.StatusForbidden, "Forbidden", "Your request could not be verified")
+	return false
 }
 
 func (handler *Handler) parseCheckoutForm(responseWriter http.ResponseWriter, request *http.Request) (orders.ShippingDetails, bool) {
